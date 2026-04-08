@@ -65,6 +65,7 @@ Store WAV files in SPIFFS:
 ```
 /chuff1.wav     # strong piston stroke
 /chuff2.wav     # weaker return stroke
+/chuff3.wav     # just to differ from second
 /whistle.wav    # steam whistle
 ```
 
