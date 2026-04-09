@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <SPIFFS.h>
 
-// --- PINY ---
+// --- PINS ---
 #define PWM_PIN 14
 #define WHISTLE_PIN 35
 #define AUDIO_PIN 25
@@ -49,7 +49,7 @@ void IRAM_ATTR handleWhistlePWM() {
 // --- TIMER ---
 hw_timer_t *timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
-volatile int lastOut = 128; // ostatnia wartość DAC
+volatile int lastOut = 128; // last DAC value
 
 void IRAM_ATTR onTimer() {
   int32_t mix = 0;
@@ -84,7 +84,7 @@ void IRAM_ATTR onTimer() {
     out = constrain(out, 0, 255);
     lastOut = out;
   } else {
-    lastOut += ((128 - lastOut) >> 3); // prosty slew do 128
+    lastOut += ((128 - lastOut) >> 3); // simple slew towards 128
     out = lastOut;
   }
 
@@ -96,12 +96,12 @@ Sample loadWav(const char *path) {
   File f = SPIFFS.open(path);
   Sample s = {NULL, 0};
   if (!f) {
-    Serial.printf("[BŁĄD] Nie znaleziono: %s\n", path);
+    Serial.printf("[ERROR] File not found: %s\n", path);
     return s;
   }
 
   if (f.size() < 44) {
-    Serial.printf("[BŁĄD] Plik %s za krótki\n", path);
+    Serial.printf("[ERROR] File %s too short\n", path);
     f.close();
     return s;
   }
@@ -109,7 +109,7 @@ Sample loadWav(const char *path) {
   s.length = f.size() - 44;
   s.data = (uint8_t*)malloc(s.length);
   if (!s.data) {
-    Serial.println("[BŁĄD] Brak pamięci RAM!");
+    Serial.println("[ERROR] Not enough RAM!");
     f.close();
     return s;
   }
@@ -118,7 +118,7 @@ Sample loadWav(const char *path) {
   f.read(s.data, s.length);
   f.close();
 
-  Serial.printf("[OK] Załadowano %s (%d bajtów)\n", path, s.length);
+  Serial.printf("[OK] Loaded %s (%d bytes)\n", path, s.length);
   return s;
 }
 
@@ -138,10 +138,10 @@ void playVoice(int ch, Sample &s, uint32_t pitch = FP_ONE, uint16_t volume = 255
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n--- PAROWIEC AUDIO START ---");
+  Serial.println("\n--- STEAMBOAT AUDIO START ---");
 
   if (!SPIFFS.begin(true)) {
-    Serial.println("[KRYTYCZNY] Błąd SPIFFS!");
+    Serial.println("[CRITICAL] SPIFFS error!");
     while (1);
   }
 
@@ -160,7 +160,7 @@ void setup() {
   timerAttachInterrupt(timer, &onTimer);
   timerAlarm(timer, 1000000 / SAMPLE_RATE, true, 0);
 
-  Serial.println("[OK] Timer uruchomiony.");
+  Serial.println("[OK] Timer started.");
 }
 
 // --- LOOP ---
@@ -181,29 +181,30 @@ void loop() {
 
   // --- CHUFF ---
   if (currentSpeed > 0.02) {
-    int minInterval = 150;   // minimalny odstęp ms
-int maxInterval = 2000;  // maksymalny odstęp ms
-float speedFactor = pow(currentSpeed, 0.6);  // dopasowanie krzywej
-int interval = maxInterval - (maxInterval - minInterval) * speedFactor;
+    int minInterval = 150;   // minimum interval in ms
+    int maxInterval = 2000;  // maximum interval in ms
+    float speedFactor = pow(currentSpeed, 0.6);  // curve shaping
+    int interval = maxInterval - (maxInterval - minInterval) * speedFactor;
+
     if (millis() - lastChuff > interval) {
       Sample *s;
       switch (nextChuff) {
-        case 0: s = &chuff1; break; // pierwszy chuff
-        case 1: s = &chuff2; break; // drugi chuff
-        case 2: s = &chuff1; break; // pierwszy chuff powtarzany jako trzeci
-        case 3: s = &chuff3; break; // trzeci chuff
+        case 0: s = &chuff1; break; // first chuff
+        case 1: s = &chuff2; break; // second chuff
+        case 2: s = &chuff1; break; // first chuff repeated as third
+        case 3: s = &chuff3; break; // third chuff
       }
 
-      float minPitch = 0.3;       // wolno -> 2x dłuższy chuff
-      float maxPitch = 3.5;       // szybko -> normalna długość
+      float minPitch = 0.3;       // slow -> 2x longer chuff
+      float maxPitch = 3.5;       // fast -> normal length
       float pitchF = minPitch + (maxPitch - minPitch) * currentSpeed;
-      float variation = (random(-10, 11) / 100.0); // drobna losowa zmiana
+      float variation = (random(-10, 11) / 100.0); // small random variation
       uint32_t pitch = (uint32_t)((pitchF + variation) * FP_ONE);
 
-      uint16_t vol = 128 + currentSpeed * 127; // głośność zależna od prędkości
+      uint16_t vol = 128 + currentSpeed * 127; // volume depends on speed
       playVoice(0, *s, pitch, vol);
 
-      nextChuff = (nextChuff + 1) % 4; // cykl 4-chuffowy
+      nextChuff = (nextChuff + 1) % 4; // 4-chuff cycle
       lastChuff = millis();
     }
   }
