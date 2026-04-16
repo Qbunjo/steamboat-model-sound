@@ -1,3 +1,4 @@
+//Version with reverse. Machine stop at 1500 PWM
 #include <Arduino.h>
 #include <SPIFFS.h>
 
